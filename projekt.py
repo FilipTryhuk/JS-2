@@ -5,15 +5,16 @@ import numpy as np
 
 
 class WrongClientTypeException(Exception):
-	"""Raised when client type is not one of the supported types."""
+	"""Rzucany gdy wprowadzony klient jest nieobsługiwanego typu"""
 	pass
 
 class UnrecognizedModesException(Exception):
-	"""Raised when a class contains unrecognized modes"""
+	"""Rzuczany gdy okienko zawiera nierozpoznane tryby działania"""
 	pass
 
 
 def GenenerateClientID():
+	"""Generator nadający klientom unikatowe ID"""
 	ID = 0
 	while True:
 		yield ID
@@ -21,6 +22,7 @@ def GenenerateClientID():
 
 
 def mean_df0(*args):
+	"""Funkcja licząca średnio lub zwracająca zero gdy wywołana jest dla zbioru pustego"""
 	try:
 		total = 0
 		i = 0
@@ -34,6 +36,7 @@ def mean_df0(*args):
 
 
 class Klient():
+	"""Klasa po której dziedziczą klasy wszystkich klientów"""
 	def wejscie(self, type, ID, queue):
 		if type not in ["A", "a", "B", "b"]:
 			raise WrongClientTypeException("Klient musi byc typu A lub B")
@@ -45,11 +48,14 @@ class Klient():
 
 
 class KlientZwykly(Klient):
+	"""Klasa zawierająca metody klientów zwykłych"""
 	def wejscie(self, type, ID, done, queue, okienko1, okienko2, okienko3, zwykly, kl_vip):
+		"""Wprowadź do kolejki nowego klienta zwykłego"""
 		super().wejscie(type, ID, queue)
 		gen_time = time.time()
 		if type in str(["A", "a"]):
 			queue[0].append([ID, gen_time])
+			#Jeśli okienko A "czekało" na klienta to natychmiast po wejściu obsłuż go
 			if (len(queue[0]) == 1 and len(queue[2]) == 0):
 				for okienko in [okienko1, okienko2, okienko3]:
 					if (okienko.waiting == True and okienko.mode[0] == 1):
@@ -57,6 +63,7 @@ class KlientZwykly(Klient):
 						break
 		elif type in str(["B", "b"]):
 			queue[1].append([ID, gen_time])
+			#Jeśli okienko B "czekało" na klienta to natychmiast po wejściu obsłuż go
 			if (len(queue[1]) == 1 and len(queue[3]) == 0):
 				for okienko in [okienko1, okienko2, okienko3]:
 					if (okienko.waiting == True and okienko.mode[1] == 1):
@@ -64,7 +71,7 @@ class KlientZwykly(Klient):
 						break
 	
 	def wyjscie(self, type, done, queue):
-		#obsłuż (tzn. usuń z kolejki) pierwszego klienta danego typu
+		"""Obsłuż pierwszego zwykłego klienta danego typu"""
 		super().wyjscie(type, done, queue)
 		try:
 			if type in str(["A", "a"]):
@@ -79,11 +86,14 @@ class KlientZwykly(Klient):
 			return d_client
 	
 	def tick(self, done, queue):
+		"""Klienci zwykli nie potrzebują metody tick"""
 		pass
 
 
 class KlientVIP(Klient):
+	"""Klasa zawierająca metody klientów VIP"""
 	def wejscie(self, type, ID, done, queue, okienko1, okienko2, okienko3, zwykly, kl_vip):
+		"""Wprowadź do kolejki nowego klienta zwykłego"""
 		super().wejscie(type, ID, queue)
 		gen_time = time.time()
 		if type in str(["A", "a"]):
@@ -102,7 +112,7 @@ class KlientVIP(Klient):
 						break
 	
 	def wyjscie(self, type, done, queue):
-		#obsłuż (tzn. usuń z kolejki) pierwszego klienta danego typu
+		"""Obsłuż pierwszego klienta VIP danego typu"""
 		super().wyjscie(type, done, queue)
 		try:
 			if type in str(["A", "a"]):
@@ -117,6 +127,7 @@ class KlientVIP(Klient):
 			return d_client
 	
 	def tick(self, done, queue):
+		""""Jeśli VIP czeka w kolejce ponad 10s to opuszcza ją pozostawiając komentarz"""
 		if len(queue[2])>0:
 			for klientVIP_A in queue[2]:
 				if (time.time() - klientVIP_A[1] > 10):
@@ -146,7 +157,7 @@ class Okienko():
 		self.mode[1] = 1 - self.mode[1]
 	
 	def kolejny(self, done, queue, zwykly, kl_vip):
-		#Wybierz tryb dzialania okienka
+		"""Ustal tryb dzialania okienka i przejdź do odpowiedniej funkcji"""
 		self.waiting = False
 		if self.mode == [1, 1]:
 			self.next_ab(done, queue, zwykly, kl_vip)
@@ -157,12 +168,14 @@ class Okienko():
 		elif self.mode == [0, 0]:
 			pass
 		else:
-			raise WrongClientTypeException
+			raise UnrecognizedModesException
 		
 	def next_ab(self, done, queue, zwykly, kl_vip):
+		"""Obsłuż dowolnego klienta zgodnie z zasadami"""
 		curr = [-1, -1]
-		#sprobuj obsluzyc pierwszego w kolejce VIP'a
+		#Najpierw spróbuj obsluzyc pierwszego w kolejce VIP'a
 		if len(queue[2])>0 and len(queue[3])>0:
+			#Jeśli w kolejce są zarówno VIP a jak i VIP b, to obsłuż tego o najmniejszym ID (a więc czekającego najdłużej)
 			if queue[2][0][0] < queue[3][0][0]:
 				curr = kl_vip.wyjscie("A", done, queue)
 				self.aVIP_logs.append(time.time() - curr[1])
@@ -175,7 +188,7 @@ class Okienko():
 		elif len(queue[3]) > 0:
 			curr = kl_vip.wyjscie("B", done, queue)
 			self.bVIP_logs.append(time.time() - curr[1])
-		#jezeli w kolecje nie ma VIPow to obsluz zwyklego
+		#Jezeli w kolecje nie ma VIPow to obsluz zwykłego zgodnie z tymi samymi zasadami
 		elif (len(queue[0])>0 and len(queue[1])>0):
 			if queue[0][0][0] < queue[1][0][0]:
 				curr = zwykly.wyjscie("A", done, queue)
@@ -194,6 +207,7 @@ class Okienko():
 			self.waiting = True
 	
 	def next_a(self, done, queue, zwykly, kl_vip):
+		"""Obsłuż najstarszego klenta A, najpierw VIP"""
 		curr = [-1, -1]
 		if len(queue[2]) > 0:
 			curr = kl_vip.wyjscie("A", done, queue)
@@ -206,6 +220,7 @@ class Okienko():
 			self.waiting = True
 		
 	def next_b(self, done, queue, zwykly, kl_vip):
+		"""Obsłuż najstarszego klenta A, najpierw VIP"""
 		curr = [-1, -1]
 		if len(queue[3]) > 0:
 			curr = kl_vip.wyjscie("B", done, queue)
@@ -219,6 +234,7 @@ class Okienko():
 
 
 def Setup():
+	"""Zainicjuj potrzebne zmienne i obiekty klas Okienko oraz Klient"""
 	utime = time.time()
 	#kolejne wiersze przeznaczone odpowiedio klientom:
 	#zwylkly A, zwykly B, VIP A, VIP B
@@ -234,6 +250,7 @@ def Setup():
 
 
 def Zakoncz(okienko1, okienko2, okienko3):
+	"""Policz średnie czasy obsługi, zwróć odpowiednie tabelki (np.array)"""
 	for okienko in (okienko1, okienko2, okienko3):
 		mean_zwykly_a = mean_df0(*okienko.a_logs)
 		mean_zwykly_b = mean_df0(*okienko.b_logs)
